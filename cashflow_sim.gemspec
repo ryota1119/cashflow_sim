@@ -10,11 +10,11 @@ Gem::Specification.new do |spec|
 
   spec.summary = "Simple amortization & cashflow simulator for loans/investments."
   spec.description = "Generate schedules with variable interest rates, CSV/JSON output, and an extensible API."
-  spec.homepage = "TODO: Put your gem's website or public repo URL here."
+  spec.homepage = "https://github.com/ryota1119/cashflow_sim"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
 
-  spec.metadata["allowed_push_host"] = "TODO: Set to your gem server 'https://example.com'"
+  spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"] = "https://github.com/ryota1119/cashflow_sim"
   spec.metadata["source_code_uri"] = "https://github.com/ryota1119/cashflow_sim"
   spec.metadata["changelog_uri"] = "https://github.com/ryota1119/cashflow_sim/blob/main/CHANGELOG.md"
@@ -29,7 +29,7 @@ Gem::Specification.new do |spec|
     end
   end
   spec.bindir = "exe"
-  spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
+  spec.executables = ["cashflow_sim"]
   spec.require_paths = ["lib"]
 
   # Uncomment to register a new dependency of your gem
