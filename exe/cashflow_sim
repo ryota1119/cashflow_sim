@@ -1,3 +1,102 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
-require "cashflow_sim"
+require "optparse"
+require "json"
+require "csv"
+require_relative "../lib/cashflow_sim"
+
+# ---- オプション定義（デフォルト値）----
+options = {
+  principal: 45_000_000,
+  years: 40,
+  # 固定金利か、線形に変動する金利かを選べる
+  rate: nil,          # 単一の年利%（例: 1.5）を与えたら固定金利として使用
+  start_rate: 0.7,    # 変動開始年利%
+  end_rate: 2.0,      # 変動終了年利%
+  end_year: 30,       # end_rate に到達する年（以降は据え置き）
+  frequency: :monthly,
+  format: "json"
+}
+
+# ---- OptionParser で引数を解析 ----
+# Ruby標準の optparse は「-」「--」のフラグを宣言し、ブロックで値を受け取る仕組み
+parser = OptionParser.new do |o|
+  o.banner = "Usage: cashflow_sim [options]"
+
+  o.on("--principal N", Integer, "元本（例: 45000000）") { |v| options[:principal] = v }
+  o.on("--years N", Integer,    "返済年数（例: 40）") { |v| options[:years] = v }
+
+  # 固定金利（--rate）か、線形変動金利（--start-rate/--end-rate/--end-year）かを選択
+  o.on("--rate F", Float,       "固定の年利%（例: 1.5）") { |v| options[:rate] = v }
+  o.on("--start-rate F", Float, "変動スタート年利%（例: 0.7）") { |v| options[:start_rate] = v }
+  o.on("--end-rate F", Float,   "変動終了年利%（例: 2.0）")     { |v| options[:end_rate] = v }
+  o.on("--end-year N", Integer, "end_rate に到達する年（例: 30）") { |v| options[:end_year] = v }
+
+  o.on("--yearly",  "年次計算にする（既定は月次）") { options[:frequency] = :yearly }
+  o.on("--monthly", "月次計算にする（デフォルト）") { options[:frequency] = :monthly }
+
+  o.on("--format FORMAT", %w[json csv], "出力形式：json | csv（default: json）") { |v| options[:format] = v }
+
+  o.on("-h", "--help", "ヘルプを表示") do
+    puts o
+    exit
+  end
+end
+
+begin
+  parser.parse!
+rescue OptionParser::ParseError => e
+  warn e.message
+  warn parser
+  exit 1
+end
+
+# ---- 金利スケジュールを決定 ----
+# Amortization.new の rate_schedule 引数には、
+#   - Proc（年を受けて年利%を返す） か
+#   - Array（年ごとの年利%）
+#   - Numeric（単一の年利%）
+# のいずれかを渡せる実装になっている。
+rate_schedule =
+  if options[:rate]
+    # 固定金利：Numeric を渡す
+    options[:rate]
+  else
+    # 線形変動金利：Proc を渡す
+    start_rate = options[:start_rate].to_f
+    end_rate   = options[:end_rate].to_f
+    end_year   = [options[:end_year].to_i, 1].max
+
+    # year=1 で start_rate、year=end_year で end_rate、その後は据え置き
+    lambda do |year|
+      y = [[year, 1].max, end_year].min
+      t = (y - 1).to_f / (end_year - 1) # 0..1 に正規化（end_year==1 の場合は下で補正）
+      t = 0.0 if end_year == 1
+      start_rate + (end_rate - start_rate) * t
+    end
+  end
+
+# ---- 計算本体 ----
+am = CashflowSim::Amortization.new(
+  principal: options[:principal],
+  years: options[:years],
+  rate_schedule: rate_schedule,
+  frequency: options[:frequency]
+)
+
+rows = am.schedule
+
+# ---- 出力 ----
+case options[:format]
+when "json"
+  puts JSON.pretty_generate(rows.map(&:to_h))
+when "csv"
+  CSV($stdout) do |csv|
+    csv << %w[year month rate payment interest principal_paid balance]
+    rows.each { |r| csv << [r.year, r.month, r.rate, r.payment, r.interest, r.principal_paid, r.balance] }
+  end
+else
+  warn "unknown format: #{options[:format]}"
+  exit 1
+end
